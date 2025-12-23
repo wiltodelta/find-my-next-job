@@ -1,0 +1,16 @@
+# AGENTS.md
+
+## Code Quality
+
+- Always run `./maintain.sh` before committing to ensure code quality.
+
+## Documentation
+
+- Update documentation (README.md, AGENTS.md) when you change functionality or add new features.
+
+## Language
+
+- Use only English for all code, comments, docstrings, documentation, commit messages, and project artifacts.
+- Communicate with users in Russian, but all technical content must be in English.
+- Do not use emoji in logs, console output, or any code output.
+- Use sentence case for titles and headings (first word capitalized, rest lowercase unless proper nouns).

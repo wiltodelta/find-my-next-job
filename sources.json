@@ -1,0 +1,332 @@
+{
+  "sources": [
+    {
+      "id": "accel",
+      "name": "Accel",
+      "url": "https://jobs.accel.com/jobs",
+      "parser": "getro",
+      "location": "California",
+      "enabled": true
+    },
+    {
+      "id": "generalcatalyst",
+      "name": "General Catalyst",
+      "url": "https://jobs.generalcatalyst.com/jobs",
+      "parser": "getro",
+      "location": "California",
+      "enabled": true
+    },
+    {
+      "id": "a16z",
+      "name": "Andreessen Horowitz",
+      "url": "https://portfoliojobs.a16z.com/jobs",
+      "parser": "consider",
+      "location": "California",
+      "enabled": true
+    },
+    {
+      "id": "index",
+      "name": "Index Ventures",
+      "url": "https://www.indexventures.com/startup-jobs/engineering%20manager/1",
+      "parser": "index",
+      "location": "California",
+      "enabled": true
+    },
+    {
+      "id": "nea",
+      "name": "New Enterprise Associates (NEA)",
+      "url": "https://careers.nea.com/jobs",
+      "parser": "consider",
+      "location": "California",
+      "enabled": true
+    },
+    {
+      "id": "foresite",
+      "name": "Foresite Capital",
+      "url": "https://careers.foresitecapital.com/jobs",
+      "parser": "consider",
+      "location": "California",
+      "enabled": true
+    },
+    {
+      "id": "kleiner",
+      "name": "Kleiner Perkins",
+      "url": "https://jobs.kleinerperkins.com/jobs",
+      "parser": "consider",
+      "location": "California",
+      "enabled": true
+    },
+    {
+      "id": "bessemer",
+      "name": "Bessemer Venture Partners",
+      "url": "https://jobs.bvp.com/jobs",
+      "parser": "consider",
+      "location": "California",
+      "enabled": true
+    },
+    {
+      "id": "lightspeed",
+      "name": "Lightspeed",
+      "url": "https://jobs.lsvp.com/jobs",
+      "parser": "consider",
+      "location": "California",
+      "enabled": true
+    },
+    {
+      "id": "thrive",
+      "name": "Thrive Capital",
+      "url": "https://jobs.thrivecap.com/jobs",
+      "parser": "getro",
+      "location": "New York",
+      "enabled": true
+    },
+    {
+      "id": "alumniventures",
+      "name": "Alumni Ventures",
+      "url": "https://jobs.av.vc/jobs",
+      "parser": "getro",
+      "location": "New Hampshire",
+      "enabled": true
+    },
+    {
+      "id": "lux",
+      "name": "Lux Capital",
+      "url": "https://jobs.luxcapital.com/jobs",
+      "parser": "getro",
+      "location": "New York",
+      "enabled": true
+    },
+    {
+      "id": "menlo",
+      "name": "Menlo Ventures",
+      "url": "https://jobs.menlovc.com/jobs",
+      "parser": "getro",
+      "location": "California",
+      "enabled": true
+    },
+    {
+      "id": "bcapital",
+      "name": "B Capital",
+      "url": "https://jobs.b.capital/jobs",
+      "parser": "getro",
+      "location": "California",
+      "enabled": true
+    },
+    {
+      "id": "columngroup",
+      "name": "The Column Group",
+      "url": "https://jobs.thecolumngroup.com/jobs",
+      "parser": "consider",
+      "location": "California",
+      "enabled": true
+    },
+    {
+      "id": "khosla",
+      "name": "Khosla Ventures",
+      "url": "https://jobs.khoslaventures.com/jobs",
+      "parser": "getro",
+      "location": "California",
+      "enabled": true
+    },
+    {
+      "id": "venrock",
+      "name": "Venrock",
+      "url": "https://jobs.venrock.com/jobs",
+      "parser": "getro",
+      "location": "California",
+      "enabled": true
+    },
+    {
+      "id": "dcvc",
+      "name": "DCVC",
+      "url": "https://jobs.dcvc.com/jobs",
+      "parser": "getro",
+      "location": "California",
+      "enabled": true
+    },
+    {
+      "id": "battery",
+      "name": "Battery Ventures",
+      "url": "https://jobs.battery.com/jobs",
+      "parser": "consider",
+      "location": "Massachusetts",
+      "enabled": true
+    },
+    {
+      "id": "baincapital",
+      "name": "Bain Capital Ventures",
+      "url": "https://jobs.baincapitalventures.com/jobs",
+      "parser": "consider",
+      "location": "California",
+      "enabled": true
+    },
+    {
+      "id": "sosv",
+      "name": "SOSV",
+      "url": "https://techjobs.sosv.com/jobs",
+      "parser": "consider",
+      "location": "New Jersey",
+      "enabled": true
+    },
+    {
+      "id": "sapphire",
+      "name": "Sapphire Ventures",
+      "url": "https://jobs.sapphireventures.com/jobs",
+      "parser": "getro",
+      "location": "California",
+      "enabled": true
+    },
+    {
+      "id": "dnx",
+      "name": "DNX Ventures",
+      "url": "https://jobs.dnx.vc/jobs",
+      "parser": "getro",
+      "location": "California",
+      "enabled": true
+    },
+    {
+      "id": "greylock",
+      "name": "Greylock Partners",
+      "url": "https://jobs.greylock.com/jobs",
+      "parser": "consider",
+      "location": "California",
+      "enabled": true
+    },
+    {
+      "id": "insight",
+      "name": "Insight Partners",
+      "url": "https://jobs.insightpartners.com/jobs",
+      "parser": "getro",
+      "location": "New York",
+      "enabled": true
+    },
+    {
+      "id": "redpoint",
+      "name": "Redpoint Ventures",
+      "url": "https://careers.redpoint.com/jobs",
+      "parser": "getro",
+      "location": "California",
+      "enabled": true
+    },
+    {
+      "id": "signalfire",
+      "name": "SignalFire",
+      "url": "https://jobs.signalfire.com/jobs",
+      "parser": "getro",
+      "location": "California",
+      "enabled": true
+    },
+    {
+      "id": "sequoia",
+      "name": "Sequoia Capital",
+      "url": "https://jobs.sequoiacap.com/jobs",
+      "parser": "consider",
+      "location": "California",
+      "enabled": true
+    },
+    {
+      "id": "contrary",
+      "name": "Contrary",
+      "url": "https://jobs.contrary.com/jobs",
+      "parser": "consider",
+      "location": "California",
+      "enabled": true
+    },
+    {
+      "id": "antler",
+      "name": "Antler",
+      "url": "https://careers.antler.co/jobs",
+      "parser": "getro",
+      "location": "Singapore",
+      "enabled": true
+    },
+    {
+      "id": "bitkraft",
+      "name": "BITKRAFT Ventures",
+      "url": "https://careers.bitkraft.vc/jobs",
+      "parser": "getro",
+      "location": "California",
+      "enabled": true
+    },
+    {
+      "id": "gv",
+      "name": "GV (Google Ventures)",
+      "url": "https://jobs.gv.com/jobs",
+      "parser": "consider",
+      "location": "California",
+      "enabled": true
+    },
+    {
+      "id": "techstars",
+      "name": "Techstars",
+      "url": "https://jobs.techstars.com/jobs",
+      "parser": "getro",
+      "location": "Colorado",
+      "enabled": true
+    },
+    {
+      "id": "newchip",
+      "name": "Newchip Accelerator",
+      "url": "https://consider.com/boards/co/newchip-accelerator",
+      "parser": "consider",
+      "location": "Texas",
+      "enabled": true
+    },
+    {
+      "id": "svangel",
+      "name": "SV Angel",
+      "url": "https://jobs.svangel.com/jobs",
+      "parser": "getro",
+      "location": "California",
+      "enabled": true
+    },
+    {
+      "id": "plugandplay",
+      "name": "Plug and Play",
+      "url": "https://jobs.pnptc.com/jobs",
+      "parser": "getro",
+      "location": "California",
+      "enabled": true
+    },
+    {
+      "id": "coatue",
+      "name": "Coatue",
+      "url": "https://jobs.coatue.com/jobs",
+      "parser": "getro",
+      "location": "New York",
+      "enabled": true
+    },
+    {
+      "id": "usv",
+      "name": "Union Square Ventures",
+      "url": "https://jobs.usv.com/jobs",
+      "parser": "consider",
+      "location": "New York",
+      "enabled": true
+    },
+    {
+      "id": "tcv",
+      "name": "TCV",
+      "url": "https://portfoliojobs.tcv.com/jobs",
+      "parser": "getro",
+      "location": "California",
+      "enabled": true
+    },
+    {
+      "id": "nfx",
+      "name": "NFX",
+      "url": "https://jobs.nfx.com/jobs",
+      "parser": "getro",
+      "location": "California",
+      "enabled": true
+    },
+    {
+      "id": "yc",
+      "name": "Y Combinator",
+      "url": "https://www.workatastartup.com/jobs/l/software-engineer",
+      "parser": "yc",
+      "location": "California",
+      "enabled": true
+    }
+  ]
+}

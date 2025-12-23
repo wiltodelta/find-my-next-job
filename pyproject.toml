@@ -1,0 +1,28 @@
+[project]
+name = "find-my-next-job"
+version = "0.1.0"
+description = "Job scraper for VC portfolio job boards"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "playwright>=1.40.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.8.0",
+    "pyright>=1.1.0",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = []
+
+[tool.pyright]
+pythonVersion = "3.13"
+typeCheckingMode = "basic"
+
