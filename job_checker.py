@@ -116,6 +116,31 @@ def matches_job_title_keywords(title: str) -> bool:
     return any(keyword in title_lower for keyword in JOB_TITLE_KEYWORDS)
 
 
+def clean_job_url(href: str, source_url: str) -> str:
+    """Clean and normalize job URLs."""
+    if not href:
+        return href
+
+    # Fix broken protocol-relative URLs that misinterpreted /jobs/ as //jobs/
+    # This happens on some Getro sites where href is "//jobs/..."
+    # resulting in "https://jobs/..."
+    if "://jobs/" in href:
+        domain_part = href.split("://")[1].split("/")[0]
+        if domain_part == "jobs":
+            # Extract domain from source_url
+            source_parts = source_url.split("/")
+            if len(source_parts) >= 3:
+                domain = source_parts[2]
+                href = href.replace("://jobs/", f"://{domain}/jobs/")
+
+    # Remove duplicate slashes (except in protocol)
+    if "://" in href:
+        protocol, rest = href.split("://", 1)
+        href = protocol + "://" + rest.replace("//", "/")
+
+    return href
+
+
 def parse_relative_date(text: str) -> int | None:
     """
     Parse relative date strings like '3 days ago', 'about 7 hours ago', '30+ days ago'.
@@ -197,7 +222,8 @@ async def scrape_consider_site(
                     continue
 
                 title = await title_link.inner_text()
-                href = await title_link.get_attribute("href")
+                href = await title_link.evaluate("el => el.href")
+                href = clean_job_url(href, url)
 
                 if not title or not href:
                     continue
@@ -280,18 +306,22 @@ async def scrape_consider_site(
                         all_links = await card.query_selector_all("a")  # type: ignore
                         for link in all_links:
                             link_text = await link.inner_text()
-                            link_href = await link.get_attribute("href") or ""
+                            link_href = await link.evaluate("el => el.href")
 
                             if not link_text or not link_text.strip():
                                 continue
 
                             text_clean = link_text.strip()
-
-                            # Skip job title link
-                            if text_clean == title.strip():
+                            if not text_clean:
                                 continue
-                            # Skip Apply button
-                            if text_clean.lower() == "apply":
+
+                            # Skip job title link, Apply button, and Read more
+                            if (
+                                link_href == href
+                                or text_clean.lower() == title.strip().lower()
+                                or text_clean.lower() == "apply"
+                                or "read more" in text_clean.lower()
+                            ):
                                 continue
                             # Skip job board links
                             if any(x in link_href for x in ["greenhouse", "lever", "ashby", "gem.com"]):
@@ -324,11 +354,6 @@ async def scrape_consider_site(
                         m = re.search(r"gem\.com/([^/?]+)", href)
                         if m:
                             company = m.group(1).replace("-", " ").title()
-
-                # Normalize URL
-                if href.startswith("/"):
-                    base_url = "/".join(url.split("/")[:3])
-                    href = base_url + href
 
                 # Filter by manager keywords
                 if not matches_job_title_keywords(title):
@@ -389,7 +414,8 @@ async def scrape_getro_site(
                     continue
 
                 title = await title_link.inner_text()
-                href = await title_link.get_attribute("href")
+                href = await title_link.evaluate("el => el.href")
+                href = clean_job_url(href, url)
 
                 if not title or not href:
                     continue
@@ -430,17 +456,22 @@ async def scrape_getro_site(
                     all_links = await container.query_selector_all("a")  # type: ignore
                     for link in all_links:
                         link_text = await link.inner_text()
-                        link_href = await link.get_attribute("href")
+                        link_href = await link.evaluate("el => el.href")
+
+                        link_text_clean = link_text.strip()
+                        if not link_text_clean:
+                            continue
 
                         # Skip title link and "Read more" links
-                        if link_href == href:
-                            continue
-                        if "read more" in link_text.lower():
-                            continue
-                        if not link_text.strip():
+                        if (
+                            link_href == href
+                            or link_text_clean.lower() == title.strip().lower()
+                            or "read more" in link_text_clean.lower()
+                            or link_text_clean.lower() == "apply"
+                        ):
                             continue
 
-                        company = link_text.strip()
+                        company = link_text_clean
                         break
 
                 # Filter by manager keywords
@@ -450,11 +481,6 @@ async def scrape_getro_site(
                 # Filter by days threshold
                 if days_ago is not None and days_ago > days_threshold:
                     continue
-
-                # Normalize URL
-                if href.startswith("/"):
-                    base_url = "/".join(url.split("/")[:3])
-                    href = base_url + href
 
                 jobs.append(
                     Job(
@@ -539,14 +565,11 @@ async def scrape_yc_jobs(page: Page, source_id: str, source_name: str, url: str,
 
                 if job_title_link:
                     title = await job_title_link.inner_text()
-                    href = await job_title_link.get_attribute("href") or ""
+                    href = await job_title_link.evaluate("el => el.href")
+                    href = clean_job_url(href, url)
 
                 if not title or not href:
                     continue
-
-                # Normalize URL
-                if href.startswith("/"):
-                    href = "https://www.workatastartup.com" + href
 
                 # Filter by manager keywords
                 if not matches_job_title_keywords(title):
@@ -620,7 +643,8 @@ async def scrape_index_ventures(
             page_fresh_count = 0  # Count fresh jobs (within threshold) before filtering
             for link in all_links:
                 try:
-                    href = await link.get_attribute("href")
+                    href = await link.evaluate("el => el.href")
+                    href = clean_job_url(href, url)
                     name = await link.get_attribute("aria-label") or await link.inner_text()
 
                     if not href or not name:
@@ -672,12 +696,14 @@ async def scrape_index_ventures(
                     if "/startup-jobs/" in href:
                         # URL format: /startup-jobs/company-name/...
                         url_parts = href.split("/")
-                        if len(url_parts) > 2:
-                            company = url_parts[2].replace("-", " ").title()
-
-                    # Normalize URL
-                    if href.startswith("/"):
-                        href = "https://www.indexventures.com" + href
+                        # After absolute URL normalization, /startup-jobs/ is at index 3 or 4
+                        # https://www.indexventures.com/startup-jobs/company/title
+                        try:
+                            idx = url_parts.index("startup-jobs")
+                            if len(url_parts) > idx + 1:
+                                company = url_parts[idx + 1].replace("-", " ").title()
+                        except ValueError:
+                            pass
 
                     # Filter by manager keywords
                     if not matches_job_title_keywords(title):
