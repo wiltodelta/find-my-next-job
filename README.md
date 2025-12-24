@@ -70,7 +70,6 @@ Source fields:
 | `name` | Yes | Display name |
 | `url` | Yes | Base URL of the job board (without filter parameters) |
 | `parser` | Yes | Parser type (see below) |
-| `location` | No | Headquarters location |
 | `enabled` | No | Set to `false` to disable (default: `true`) |
 
 Example source:
@@ -81,7 +80,6 @@ Example source:
   "name": "Andreessen Horowitz",
   "url": "https://portfoliojobs.a16z.com/jobs",
   "parser": "consider",
-  "location": "California",
   "enabled": true
 }
 ```
@@ -125,6 +123,25 @@ Edit `config.py` to:
 
 - `state.json` - Tracks last scrape time and known job URLs per source
 - `new_jobs/new_jobs_YYYY-MM-DD_HH-MM-SS.json` - New jobs found in each run
+
+### Job fields
+
+Each job includes:
+| Field | Description |
+|-------|-------------|
+| `title` | Job title |
+| `company` | Company name |
+| `source_id` | Source identifier |
+| `url` | Direct link to job posting |
+| `location` | Job location (extracted from job card) |
+| `posted_date` | Date when job was posted (ISO format) |
+| `potential_duplicate` | True if same company+title seen recently |
+
+### Duplicate detection
+
+Jobs are marked as potential duplicates when the same company+title combination appears within 7 days across any source. This helps identify jobs posted on multiple VC portfolio boards.
+
+Duplicate jobs have `"potential_duplicate": true` in the JSON output and are marked with `[DUP]` in console output.
 
 ## Supported sources
 

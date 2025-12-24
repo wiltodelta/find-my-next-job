@@ -35,13 +35,27 @@ class Job:
     company: str | None
     source_id: str  # Source identifier for state tracking
     url: str
+    location: str | None = None  # Job location (e.g., "Remote", "London")
     posted_date: str | None = None  # ISO format date string or None
     days_ago: int | None = None
     scraped_at: str = ""
+    potential_duplicate: bool = False  # True if same company+title seen recently
 
     def __post_init__(self):
         if not self.scraped_at:
             self.scraped_at = datetime.now().isoformat()
+
+    def get_duplicate_key(self) -> str | None:
+        """
+        Return a normalized key for duplicate detection.
+        Returns None if company is not available.
+        """
+        if not self.company:
+            return None
+        # Normalize: lowercase, strip whitespace
+        company_norm = self.company.lower().strip()
+        title_norm = self.title.lower().strip()
+        return f"{company_norm}|{title_norm}"
 
 
 @dataclass
@@ -195,172 +209,73 @@ async def scrape_consider_site(
     """
     Scrape jobs from Consider.co platform sites (a16z, Sequoia, Battery, etc.).
 
-    Page structure for each job card:
-    - Company section with logo and name
-    - Job cards with: heading (job title), badges (date, salary, location), Apply link
-    - Date is in element with class 'job-list-badge-posted'
+    DOM structure:
+    - div.job-list-job: job card container
+    - a.job-list-job-company-link: company name
+    - h2.job-list-job-title a / h3.job-list-job-title a: job title and URL
+    - .job-list-badge-locations: location
+    - .job-list-badge-posted: date (e.g., "Posted less than 1 day ago")
     """
     jobs = []
+    seen_urls = set()
 
     try:
         await page.goto(url, wait_until="networkidle", timeout=30000)
-        await page.wait_for_timeout(2000)  # Extra wait for JS rendering
+        await page.wait_for_timeout(2000)
 
         # Scroll to load all jobs
         for _ in range(5):
             await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
             await page.wait_for_timeout(1000)
 
-        # Find all job title headings (h2 or h3 with links inside job cards)
-        headings = await page.query_selector_all("h2.job-list-job-title, h3.job-list-job-title, h2, h3")
+        # Find all job cards
+        job_cards = await page.query_selector_all("div.job-list-job")
 
-        for heading in headings:
+        for card in job_cards:
             try:
-                # Get the job title link inside the heading
-                title_link = await heading.query_selector("a")
-                if not title_link:
+                # Extract title and URL from h2/h3.job-list-job-title a
+                title_el = await card.query_selector("h2.job-list-job-title a, h3.job-list-job-title a")
+                if not title_el:
                     continue
 
-                title = await title_link.inner_text()
-                href = await title_link.evaluate("el => el.href")
+                title = await title_el.inner_text()
+                href = await title_el.evaluate("el => el.href")
                 href = clean_job_url(href, url)
 
                 if not title or not href:
                     continue
 
-                # Skip non-job links
-                if any(skip in href.lower() for skip in ["privacy", "terms", "about", "blog", "contact"]):
+                if href in seen_urls:
                     continue
 
-                # Find company name and posting date
-                company = None
+                # Extract company from a.job-list-job-company-link
+                company_el = await card.query_selector("a.job-list-job-company-link")
+                company = await company_el.inner_text() if company_el else None
+
+                # Extract location from .job-list-badge-locations
+                location_el = await card.query_selector(".job-list-badge-locations")
+                location = await location_el.inner_text() if location_el else None
+
+                # Extract date from .job-list-badge-posted
+                date_el = await card.query_selector(".job-list-badge-posted")
+                date_text = await date_el.inner_text() if date_el else None
+
                 days_ago = None
                 posted_date = None
 
-                # Get the job card container (climb up to find the card)
-                # Structure: heading -> job-details -> job-card (contains company and date badge)
-                card = await heading.evaluate_handle(
-                    """el => {
-                        // Try to find the job card container
-                        let parent = el.parentElement;
-                        for (let i = 0; i < 5 && parent; i++) {
-                            // Look for a container that has the posted badge
-                            if (parent.querySelector && parent.querySelector('.job-list-badge-posted')) {
-                                return parent;
-                            }
-                            parent = parent.parentElement;
-                        }
-                        // Fallback to grandparent
-                        return el.parentElement?.parentElement?.parentElement;
-                    }"""
-                )
+                if date_text:
+                    days_ago = parse_relative_date(date_text)
+                    if days_ago is not None:
+                        posted_date = (datetime.now() - timedelta(days=days_ago)).date().isoformat()
 
-                if card:
-                    # Look for date badge with class 'job-list-badge-posted'
-                    date_badge = await card.query_selector(".job-list-badge-posted")  # type: ignore
-                    if date_badge:
-                        date_text = await date_badge.inner_text()
-                        if date_text:
-                            days_ago_parsed = parse_relative_date(date_text)
-                            if days_ago_parsed is not None:
-                                days_ago = days_ago_parsed
-                                posted_date = (datetime.now() - timedelta(days=days_ago)).date().isoformat()
+                # Filter by days threshold
+                if days_ago is not None and days_ago > days_threshold:
+                    continue
 
-                    # If no badge found, try text content
-                    if days_ago is None:
-                        card_text = await card.evaluate("el => el.textContent")  # type: ignore
-                        if card_text and "posted" in card_text.lower():
-                            days_ago_parsed = parse_relative_date(card_text)
-                            if days_ago_parsed is not None:
-                                days_ago = days_ago_parsed
-                                posted_date = (datetime.now() - timedelta(days=days_ago)).date().isoformat()
-
-                    # Find company name from logo alt text or parent container
-                    # Company logos have alt like "Harness logo", "Mews logo", etc.
-                    company_name = await card.evaluate(
-                        """el => {
-                            // Look for company logo in parent containers
-                            let parent = el;
-                            for (let i = 0; i < 8 && parent; i++) {
-                                // Look for logo image with alt containing "logo"
-                                const logo = parent.querySelector('img[alt*="logo"]');
-                                if (logo) {
-                                    const alt = logo.getAttribute('alt') || '';
-                                    // Extract company name by removing " logo" suffix
-                                    const name = alt.replace(/\\s*logo\\s*$/i, '').trim();
-                                    if (name && name.length > 0) {
-                                        return name;
-                                    }
-                                }
-                                parent = parent.parentElement;
-                            }
-                            return null;
-                        }"""
-                    )  # type: ignore
-
-                    if company_name:
-                        company = company_name
-
-                    # Fallback: look for company link that's not job title or Apply
-                    if not company:
-                        all_links = await card.query_selector_all("a")  # type: ignore
-                        for link in all_links:
-                            link_text = await link.inner_text()
-                            link_href = await link.evaluate("el => el.href")
-
-                            if not link_text or not link_text.strip():
-                                continue
-
-                            text_clean = link_text.strip()
-                            if not text_clean:
-                                continue
-
-                            # Skip job title link, Apply button, and Read more
-                            if (
-                                link_href == href
-                                or text_clean.lower() == title.strip().lower()
-                                or text_clean.lower() == "apply"
-                                or "read more" in text_clean.lower()
-                            ):
-                                continue
-                            # Skip job board links
-                            if any(x in link_href for x in ["greenhouse", "lever", "ashby", "gem.com"]):
-                                continue
-                            # Skip navigation/utility links
-                            if any(x in link_href.lower() for x in ["privacy", "terms", "about", "blog", "all jobs"]):
-                                continue
-                            if "all jobs" in text_clean.lower() or "matching job" in text_clean.lower():
-                                continue
-
-                            # This is likely the company name
-                            company = text_clean
-                            break
-
-                # Fallback company extraction from URL
-                if not company:
-                    if "greenhouse.io/" in href:
-                        m = re.search(r"greenhouse\.io/([^/]+)", href)
-                        if m:
-                            company = m.group(1).replace("-", " ").title()
-                    elif "ashbyhq.com/" in href:
-                        m = re.search(r"ashbyhq\.com/([^/?]+)", href)
-                        if m:
-                            company = m.group(1).replace("-", " ").title()
-                    elif "lever.co/" in href:
-                        m = re.search(r"lever\.co/([^/]+)", href)
-                        if m:
-                            company = m.group(1).replace("-", " ").title()
-                    elif "gem.com/" in href:
-                        m = re.search(r"gem\.com/([^/?]+)", href)
-                        if m:
-                            company = m.group(1).replace("-", " ").title()
+                seen_urls.add(href)
 
                 # Filter by manager keywords
                 if not matches_job_title_keywords(title):
-                    continue
-
-                # Filter by days threshold if date available
-                if days_ago is not None and days_ago > days_threshold:
                     continue
 
                 jobs.append(
@@ -369,6 +284,7 @@ async def scrape_consider_site(
                         company=company.strip() if company else None,
                         source_id=source_id,
                         url=href,
+                        location=location.strip() if location else None,
                         posted_date=posted_date,
                         days_ago=days_ago,
                     )
@@ -389,97 +305,121 @@ async def scrape_getro_site(
 ) -> list[Job]:
     """
     Scrape jobs from Getro-powered sites (Khosla, Antler, General Catalyst, etc.).
-    These sites usually have search queries in URL and show dates like "3 days".
+
+    DOM structure uses schema.org microdata:
+    - div[itemprop="title"]: job title
+    - a[data-testid="job-title-link"]: job URL
+    - meta[itemprop="name"] or a[data-testid="link"]: company name
+    - meta[itemprop="address"]: location
+    - meta[itemprop="datePosted"]: date in ISO format (YYYY-MM-DD)
     """
     jobs = []
+    seen_urls = set()
 
     try:
         await page.goto(url, wait_until="networkidle", timeout=30000)
         await page.wait_for_timeout(3000)
 
-        # Find all job title headings (h4 is common for Getro)
-        headings = await page.query_selector_all("h4")
+        # Find all job cards using the job-info class or job title links
+        job_cards = await page.query_selector_all('a[data-testid="job-title-link"]')
 
-        for heading in headings:
+        for job_link in job_cards:
             try:
-                # Get the job title link inside or as the heading
-                title_link = await heading.query_selector("a")
-                if not title_link:
-                    # In some Getro versions, h4 itself might not have <a>, but <a> is nearby
-                    parent = await heading.evaluate_handle("el => el.parentElement")
-                    if parent:
-                        title_link = await parent.query_selector("a")  # type: ignore
-
-                if not title_link:
-                    continue
-
-                title = await title_link.inner_text()
-                href = await title_link.evaluate("el => el.href")
+                href = await job_link.evaluate("el => el.href")
                 href = clean_job_url(href, url)
 
-                if not title or not href:
+                if not href or href in seen_urls:
                     continue
 
-                # Find company name and posting date
-                company = None
+                # Get parent container with schema.org data
+                container = await job_link.evaluate_handle(
+                    """el => {
+                        let parent = el.parentElement;
+                        for (let i = 0; i < 8 && parent; i++) {
+                            if (parent.querySelector('[itemprop="address"]') ||
+                                parent.querySelector('[itemprop="datePosted"]')) {
+                                return parent;
+                            }
+                            parent = parent.parentElement;
+                        }
+                        return el.closest('.job-info') || el.parentElement?.parentElement;
+                    }"""
+                )
+
+                if not container:
+                    continue
+
+                # Extract data using schema.org microdata selectors
+                card_data = await container.evaluate(  # type: ignore
+                    """el => {
+                        const data = {
+                            title: null, company: null, location: null, datePosted: null
+                        };
+
+                        // Title: div[itemprop="title"]
+                        const titleEl = el.querySelector('[itemprop="title"]');
+                        if (titleEl) {
+                            data.title = titleEl.textContent?.trim();
+                        }
+
+                        // Company: meta[itemprop="name"] (content) or a[data-testid="link"]
+                        const companyMeta = el.querySelector('meta[itemprop="name"]');
+                        if (companyMeta) {
+                            data.company = companyMeta.getAttribute('content');
+                        } else {
+                            const companyLink = el.querySelector('a[data-testid="link"]');
+                            if (companyLink) {
+                                data.company = companyLink.textContent?.trim();
+                            }
+                        }
+
+                        // Location: meta[itemprop="address"] (content)
+                        const locationMeta = el.querySelector('meta[itemprop="address"]');
+                        if (locationMeta) {
+                            data.location = locationMeta.getAttribute('content');
+                        }
+
+                        // Date: meta[itemprop="datePosted"] (content) - ISO format
+                        const dateMeta = el.querySelector('meta[itemprop="datePosted"]');
+                        if (dateMeta) {
+                            data.datePosted = dateMeta.getAttribute('content');
+                        }
+
+                        return data;
+                    }"""
+                )
+
+                if not card_data:
+                    continue
+
+                title = card_data.get("title")
+                company = card_data.get("company")
+                location = card_data.get("location")
+                date_posted_str = card_data.get("datePosted")
+
+                if not title:
+                    continue
+
+                # Parse ISO date (YYYY-MM-DD) to calculate days_ago
                 days_ago = None
                 posted_date = None
 
-                # Get container
-                container = await heading.evaluate_handle(
-                    'el => el.closest(\'div[class*="item"], div[class*="card"], li\')'
-                )
-                if not container:
-                    container = await heading.evaluate_handle("el => el.parentElement?.parentElement")
-
-                if container:
-                    # Get text for date parsing
-                    container_text = await container.evaluate("el => el.textContent")  # type: ignore
-                    if container_text:
-                        text_lower = container_text.lower()
-                        if "today" in text_lower or "just now" in text_lower:
-                            days_ago = 0
-                        elif "yesterday" in text_lower:
-                            days_ago = 1
-                        else:
-                            # Look for "X days", "X hours", etc.
-                            date_match = re.search(r"(\d+)\s*(?:hour|day|week|month)s?", text_lower)
-                            if date_match:
-                                days_ago_parsed = parse_relative_date(date_match.group(0))
-                                if days_ago_parsed is not None:
-                                    days_ago = days_ago_parsed
-
-                        if days_ago is not None:
-                            posted_date = (datetime.now() - timedelta(days=days_ago)).date().isoformat()
-
-                    # Find company (usually another link in the same container)
-                    all_links = await container.query_selector_all("a")  # type: ignore
-                    for link in all_links:
-                        link_text = await link.inner_text()
-                        link_href = await link.evaluate("el => el.href")
-
-                        link_text_clean = link_text.strip()
-                        if not link_text_clean:
-                            continue
-
-                        # Skip title link and "Read more" links
-                        if (
-                            link_href == href
-                            or link_text_clean.lower() == title.strip().lower()
-                            or "read more" in link_text_clean.lower()
-                            or link_text_clean.lower() == "apply"
-                        ):
-                            continue
-
-                        company = link_text_clean
-                        break
-
-                # Filter by manager keywords
-                if not matches_job_title_keywords(title):
-                    continue
+                if date_posted_str:
+                    try:
+                        posted = datetime.strptime(date_posted_str, "%Y-%m-%d")
+                        days_ago = (datetime.now() - posted).days
+                        posted_date = posted.date().isoformat()
+                    except ValueError:
+                        pass
 
                 # Filter by days threshold
                 if days_ago is not None and days_ago > days_threshold:
+                    continue
+
+                seen_urls.add(href)
+
+                # Filter by manager keywords
+                if not matches_job_title_keywords(title):
                     continue
 
                 jobs.append(
@@ -488,6 +428,7 @@ async def scrape_getro_site(
                         company=company.strip() if company else None,
                         source_id=source_id,
                         url=href,
+                        location=location.strip() if location else None,
                         posted_date=posted_date,
                         days_ago=days_ago,
                     )
@@ -506,97 +447,137 @@ async def scrape_getro_site(
 async def scrape_yc_jobs(page: Page, source_id: str, source_name: str, url: str, days_threshold: int = 7) -> list[Job]:
     """
     Scrape jobs from Y Combinator's Work at a Startup.
-    This site shows posting dates in format 'X days ago'.
 
     Page structure:
-    - Each job card has a company link with date: "Company (Batch) • Description (X days ago)"
-    - Below that is the job title link
-    - Then job metadata (fulltime, location, etc.)
+    - Company link: "Company (Batch) Description (X days ago)"
+    - Job title link: below company link
+    - Metadata div: "fulltime Location / Remote Type"
+
+    Note: Page content is randomly populated, so we load it multiple times
+    to collect more jobs.
     """
-    jobs = []
+    seen_urls: set[str] = set()
+    jobs: list[Job] = []
+
+    # Load page multiple times as content is randomly populated
+    num_loads = 5
 
     try:
-        await page.goto(url, wait_until="networkidle", timeout=30000)
-        await page.wait_for_timeout(3000)  # Wait for dynamic content
+        for load_num in range(num_loads):
+            await page.goto(url, wait_until="networkidle", timeout=30000)
+            await page.wait_for_timeout(2000)
 
-        # Find all job cards - they contain company info links with dates
-        # Structure: link with "Company (Batch) • Description (X days ago)"
-        company_links = await page.query_selector_all('a[href*="/companies/"]')
+            # Scroll to load more content
+            for _ in range(3):
+                await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                await page.wait_for_timeout(500)
 
-        for company_link in company_links:
-            try:
-                company_text = await company_link.inner_text()
+            # Find all job title links
+            job_links = await page.query_selector_all('a[href*="/jobs/"]')
+            load_jobs_count = 0
 
-                if not company_text:
-                    continue
-
-                # Check if this link contains date info (indicates it's a job listing header)
-                if "ago)" not in company_text.lower():
-                    continue
-
-                # Extract date from parentheses at the end: "(7 days ago)"
-                date_match = re.search(r"\(([^)]*(?:ago|hour|day|week|month)[^)]*)\)$", company_text, re.IGNORECASE)
-                days_ago = None
-                if date_match:
-                    date_text = date_match.group(1)
-                    days_ago = parse_relative_date(date_text)
-                    # Remove date from text
-                    company_text = company_text[: date_match.start()].strip()
-
-                # Parse company name: "SnapMagic (S15) • AI copilot for electronics design"
-                parts = company_text.split("•")
-                company = parts[0].strip() if parts else None
-
-                # Find the parent container and look for the job title link
-                parent = await company_link.evaluate_handle("el => el.closest('div')?.parentElement")
-                if not parent:
-                    continue
-
-                # Find the job title link (usually a sibling or nearby element)
-                job_title_link = await parent.query_selector('a[href*="/jobs/"]')  # type: ignore
-                if not job_title_link:
-                    # Try another level up
-                    grandparent = await parent.evaluate_handle("el => el.parentElement")
-                    if grandparent:
-                        job_title_link = await grandparent.query_selector('a[href*="/jobs/"]')  # type: ignore
-
-                title = "Software Engineer"
-                href = ""
-
-                if job_title_link:
-                    title = await job_title_link.inner_text()
-                    href = await job_title_link.evaluate("el => el.href")
+            for job_link in job_links:
+                try:
+                    title = await job_link.inner_text()
+                    href = await job_link.evaluate("el => el.href")
                     href = clean_job_url(href, url)
 
-                if not title or not href:
-                    continue
+                    if not title or not href:
+                        continue
 
-                # Filter by manager keywords
-                if not matches_job_title_keywords(title):
-                    continue
+                    if href in seen_urls:
+                        continue
 
-                # Filter by days threshold if date available
-                if days_ago is not None and days_ago > days_threshold:
-                    continue
+                    # Filter by manager keywords early
+                    if not matches_job_title_keywords(title):
+                        continue
 
-                # Calculate posted_date from days_ago
-                posted_date = None
-                if days_ago is not None:
-                    posted_date = (datetime.now() - timedelta(days=days_ago)).date().isoformat()
-
-                jobs.append(
-                    Job(
-                        title=title.strip(),
-                        company=company.strip() if company else None,
-                        source_id=source_id,
-                        url=href,
-                        posted_date=posted_date,
-                        days_ago=days_ago,
+                    # Find parent container for job card (climb up to find company)
+                    card = await job_link.evaluate_handle(
+                        """el => {
+                            let parent = el.parentElement;
+                            for (let i = 0; i < 6 && parent; i++) {
+                                if (parent.querySelector('span.font-bold')) {
+                                    return parent;
+                                }
+                                parent = parent.parentElement;
+                            }
+                            return el.parentElement?.parentElement?.parentElement;
+                        }"""
                     )
-                )
 
-            except Exception:
-                continue
+                    if not card:
+                        continue
+
+                    # Extract data using precise selectors based on YC DOM structure:
+                    # - Company: span.block.font-bold or span.font-bold
+                    # - Location: div.break-all
+                    # - Date: span.text-gray-400
+                    card_data = await card.evaluate(  # type: ignore
+                        """el => {
+                            const data = { company: null, location: null, date: null };
+
+                            // Company: span with font-bold class
+                            const companyEl = el.querySelector('span.font-bold');
+                            if (companyEl) {
+                                data.company = companyEl.textContent?.trim();
+                            }
+
+                            // Location: div with break-all class
+                            const locationEl = el.querySelector('.break-all');
+                            if (locationEl) {
+                                data.location = locationEl.textContent?.trim();
+                            }
+
+                            // Date: span with text-gray-400 class, contains "(X days ago)"
+                            const dateEl = el.querySelector('span.text-gray-400');
+                            if (dateEl) {
+                                let dateText = dateEl.textContent?.trim() || '';
+                                // Remove parentheses: "(8 days ago)" -> "8 days ago"
+                                dateText = dateText.replace(/^\\(|\\)$/g, '');
+                                data.date = dateText;
+                            }
+
+                            return data;
+                        }"""
+                    )
+
+                    company = card_data.get("company") if card_data else None
+                    location = card_data.get("location") if card_data else None
+                    date_text = card_data.get("date") if card_data else None
+
+                    days_ago = None
+                    posted_date = None
+
+                    if date_text:
+                        days_ago = parse_relative_date(date_text)
+                        if days_ago is not None:
+                            posted_date = (datetime.now() - timedelta(days=days_ago)).date().isoformat()
+
+                    # Filter by days threshold
+                    if days_ago is not None and days_ago > days_threshold:
+                        continue
+
+                    seen_urls.add(href)
+                    load_jobs_count += 1
+
+                    jobs.append(
+                        Job(
+                            title=title.strip(),
+                            company=company.strip() if company else None,
+                            source_id=source_id,
+                            url=href,
+                            location=location.strip() if location else None,
+                            posted_date=posted_date,
+                            days_ago=days_ago,
+                        )
+                    )
+
+                except Exception:
+                    continue
+
+            if load_num < num_loads - 1:
+                print(f"    Load {load_num + 1}/{num_loads}: {load_jobs_count} new jobs")
 
     except PlaywrightTimeout:
         print(f"  Timeout loading {source_name}")
@@ -613,9 +594,13 @@ async def scrape_index_ventures(
     Scrape jobs from Index Ventures startup jobs page.
     Navigates through multiple pages and filters by date (last 7 days).
 
-    Job format in link name: "Title Company Location... Category Stage Size Date"
-    Example: "Engineering Team Leader Remote Remote Asia Administration Future Of Work Series C
-    1000+ Mon, December 22, 2025"
+    DOM structure:
+    - li.result contains each job card
+    - h3.result__title: job title
+    - h4.result__company: company name
+    - a.result__link[href]: job URL
+    - ul.result__category-list__locations span: location (e.g., "Remote", "London")
+    - ul.result__category-list__date span: date (e.g., "Tue, December 23, 2025")
     """
     jobs = []
     seen_urls = set()
@@ -625,7 +610,6 @@ async def scrape_index_ventures(
     while True:
         try:
             # Build URL with page number
-            # If base_url ends with /1, replace it; otherwise append page number
             if base_url.endswith("/1"):
                 url = base_url.replace("/1", f"/{page_num}")
             elif base_url.endswith("/"):
@@ -636,74 +620,61 @@ async def scrape_index_ventures(
             await page.goto(url, wait_until="networkidle", timeout=30000)
             await page.wait_for_timeout(3000)
 
-            # Find all links
-            all_links = await page.query_selector_all("a")
+            # Find all job cards
+            job_cards = await page.query_selector_all("li.result")
 
             page_jobs_count = 0
-            page_fresh_count = 0  # Count fresh jobs (within threshold) before filtering
-            for link in all_links:
+            page_fresh_count = 0
+
+            for card in job_cards:
                 try:
+                    # Extract job link and URL
+                    link = await card.query_selector("a.result__link")
+                    if not link:
+                        continue
+
                     href = await link.evaluate("el => el.href")
                     href = clean_job_url(href, url)
-                    name = await link.get_attribute("aria-label") or await link.inner_text()
 
-                    if not href or not name:
+                    if not href or href in seen_urls:
                         continue
 
-                    # Remove newlines and normalize whitespace
-                    name = " ".join(name.split())
+                    # Extract title from h3.result__title
+                    title_el = await card.query_selector("h3.result__title")
+                    title = await title_el.inner_text() if title_el else None
 
-                    # Check if link contains a date pattern at the end
-                    date_match = re.search(r"(Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s+(\w+)\s+(\d+),\s+(\d{4})$", name)
-                    if not date_match:
+                    if not title:
                         continue
 
-                    # Avoid duplicates
-                    if href in seen_urls:
-                        continue
-                    seen_urls.add(href)
+                    # Extract company from h4.result__company
+                    company_el = await card.query_selector("h4.result__company")
+                    company = await company_el.inner_text() if company_el else None
 
-                    # Remove date from name to get job info
-                    job_text = name[: date_match.start()].strip()
+                    # Extract location from ul.result__category-list__locations span
+                    location_el = await card.query_selector("ul.result__category-list__locations span")
+                    location = await location_el.inner_text() if location_el else None
 
-                    # Parse date
-                    date_str = date_match.group(0)
-                    try:
-                        posted = datetime.strptime(date_str, "%a, %B %d, %Y")
-                        days_ago = (datetime.now() - posted).days
-                        posted_date = posted.date().isoformat()
-                    except Exception:
-                        continue
+                    # Extract date from ul.result__category-list__date span
+                    date_el = await card.query_selector("ul.result__category-list__date span")
+                    date_str = await date_el.inner_text() if date_el else None
 
-                    # Filter by days threshold
-                    if days_ago > days_threshold:
-                        continue
+                    days_ago = None
+                    posted_date = None
 
-                    page_fresh_count += 1  # This job is within the date threshold
-
-                    # Split by spaces to extract title
-                    # Format: "Title CompanyName Location... Category Stage Size"
-                    parts = job_text.split()
-                    if len(parts) < 2:
-                        continue
-
-                    # Title is typically the first few words before company name
-                    # Let's take first 3-5 words as title
-                    title = " ".join(parts[:5])  # Take first 5 words as title approximation
-
-                    # Company can be extracted from URL or text (tricky)
-                    company = None
-                    if "/startup-jobs/" in href:
-                        # URL format: /startup-jobs/company-name/...
-                        url_parts = href.split("/")
-                        # After absolute URL normalization, /startup-jobs/ is at index 3 or 4
-                        # https://www.indexventures.com/startup-jobs/company/title
+                    if date_str:
                         try:
-                            idx = url_parts.index("startup-jobs")
-                            if len(url_parts) > idx + 1:
-                                company = url_parts[idx + 1].replace("-", " ").title()
+                            posted = datetime.strptime(date_str.strip(), "%a, %B %d, %Y")
+                            days_ago = (datetime.now() - posted).days
+                            posted_date = posted.date().isoformat()
                         except ValueError:
                             pass
+
+                    # Filter by days threshold
+                    if days_ago is not None and days_ago > days_threshold:
+                        continue
+
+                    seen_urls.add(href)
+                    page_fresh_count += 1
 
                     # Filter by manager keywords
                     if not matches_job_title_keywords(title):
@@ -715,6 +686,7 @@ async def scrape_index_ventures(
                             company=company.strip() if company else None,
                             source_id=source_id,
                             url=href,
+                            location=location.strip() if location else None,
                             posted_date=posted_date,
                             days_ago=days_ago,
                         )
@@ -763,6 +735,68 @@ async def scrape_source(page: Page, source: Source, days_threshold: int) -> list
         return []
 
 
+def load_recent_jobs(new_jobs_dir: Path, days: int = 7) -> list[dict]:
+    """
+    Load jobs from new_jobs files within the specified number of days.
+    Returns a list of job dictionaries.
+    """
+    recent_jobs = []
+    cutoff_date = datetime.now() - timedelta(days=days)
+
+    if not new_jobs_dir.exists():
+        return recent_jobs
+
+    for filepath in new_jobs_dir.glob("new_jobs_*.json"):
+        try:
+            # Extract date from filename: new_jobs_2025-12-24_09-23-20.json
+            filename = filepath.stem  # new_jobs_2025-12-24_09-23-20
+            date_part = filename.replace("new_jobs_", "")  # 2025-12-24_09-23-20
+            file_date = datetime.strptime(date_part, "%Y-%m-%d_%H-%M-%S")
+
+            if file_date >= cutoff_date:
+                with open(filepath, encoding="utf-8") as f:
+                    data = json.load(f)
+                    for job in data.get("jobs", []):
+                        recent_jobs.append(job)
+        except (ValueError, json.JSONDecodeError) as e:
+            print(f"Warning: Could not parse {filepath.name}: {e}")
+            continue
+
+    return recent_jobs
+
+
+def build_duplicate_keys(jobs: list[dict]) -> set[str]:
+    """
+    Build a set of duplicate detection keys from job dictionaries.
+    Key format: "company|title" (lowercase, stripped).
+    """
+    keys = set()
+    for job in jobs:
+        company = job.get("company")
+        title = job.get("title")
+        if company and title:
+            key = f"{company.lower().strip()}|{title.lower().strip()}"
+            keys.add(key)
+    return keys
+
+
+def mark_potential_duplicates(jobs: list[Job], existing_keys: set[str]) -> list[Job]:
+    """
+    Mark jobs as potential duplicates if their company+title matches existing keys.
+    Also marks duplicates within the current batch.
+    """
+    seen_in_batch: set[str] = set()
+
+    for job in jobs:
+        key = job.get_duplicate_key()
+        if key:
+            if key in existing_keys or key in seen_in_batch:
+                job.potential_duplicate = True
+            seen_in_batch.add(key)
+
+    return jobs
+
+
 def load_state(filepath: Path) -> dict[str, SourceState]:
     """Load scraping state from JSON file."""
     if not filepath.exists():
@@ -802,14 +836,26 @@ def save_jobs(jobs: list[Job], filepath: Path, metadata: dict | None = None):
     # Sort by posted_date descending (newest first), jobs without date at the end
     sorted_jobs = sorted(jobs, key=lambda j: j.posted_date or "0000-00-00", reverse=True)
 
-    # Exclude days_ago (temporary field used for date calculation) and None values
+    # Exclude days_ago (temporary field) and False-valued potential_duplicate
     exclude_fields = {"days_ago"}
+
+    def job_to_dict(job: Job) -> dict:
+        result = {}
+        for k, v in asdict(job).items():
+            if k in exclude_fields:
+                continue
+            if v is None:
+                continue
+            # Only include potential_duplicate if True
+            if k == "potential_duplicate" and v is False:
+                continue
+            result[k] = v
+        return result
+
     output = {
         "scraped_at": datetime.now().isoformat(),
         "total_jobs": len(sorted_jobs),
-        "jobs": [
-            {k: v for k, v in asdict(job).items() if v is not None and k not in exclude_fields} for job in sorted_jobs
-        ],
+        "jobs": [job_to_dict(job) for job in sorted_jobs],
     }
     if metadata:
         output.update(metadata)
@@ -1034,6 +1080,12 @@ async def main():
     # Find new jobs since last scrape
     new_jobs = find_new_jobs(filtered_jobs, state)
 
+    # Mark potential duplicates (same company+title within last 7 days)
+    if new_jobs:
+        recent_jobs = load_recent_jobs(new_jobs_dir, days=7)
+        existing_keys = build_duplicate_keys(recent_jobs)
+        new_jobs = mark_potential_duplicates(new_jobs, existing_keys)
+
     # Update and save state
     state = update_state(state, filtered_jobs, scrape_time)
     save_state(state, state_file)
@@ -1054,6 +1106,9 @@ async def main():
         )
 
     # Print summary
+    duplicate_count = sum(1 for j in new_jobs if j.potential_duplicate) if new_jobs else 0
+    unique_count = len(new_jobs) - duplicate_count if new_jobs else 0
+
     print("\n" + "=" * 60)
     print("SUMMARY")
     print("=" * 60)
@@ -1061,6 +1116,9 @@ async def main():
     print(f"Total jobs found: {len(all_jobs)}")
     print(f"Jobs within {args.days} days: {len(filtered_jobs)}")
     print(f"New jobs since last run: {len(new_jobs)}")
+    if new_jobs:
+        print(f"  - Unique: {unique_count}")
+        print(f"  - Potential duplicates: {duplicate_count}")
     print(f"\nState saved to: {state_file}")
     if new_jobs:
         print(f"New jobs saved to: {new_jobs_file}")
@@ -1082,7 +1140,8 @@ async def main():
             print(f"\n{source} ({len(jobs)} new):")
             for job in jobs[:10]:  # Show first 10 per source
                 date_info = f" ({job.days_ago}d ago)" if job.days_ago is not None else ""
-                print(f"  • {job.title} @ {job.company}{date_info}")
+                dup_marker = " [DUP]" if job.potential_duplicate else ""
+                print(f"  • {job.title} @ {job.company}{date_info}{dup_marker}")
             if len(jobs) > 10:
                 print(f"  ... and {len(jobs) - 10} more")
 

@@ -5,7 +5,6 @@
       "name": "Accel",
       "url": "https://jobs.accel.com/jobs",
       "parser": "getro",
-      "location": "California",
       "enabled": true
     },
     {
@@ -13,7 +12,6 @@
       "name": "General Catalyst",
       "url": "https://jobs.generalcatalyst.com/jobs",
       "parser": "getro",
-      "location": "California",
       "enabled": true
     },
     {
@@ -21,7 +19,6 @@
       "name": "Andreessen Horowitz",
       "url": "https://portfoliojobs.a16z.com/jobs",
       "parser": "consider",
-      "location": "California",
       "enabled": true
     },
     {
@@ -29,7 +26,6 @@
       "name": "Index Ventures",
       "url": "https://www.indexventures.com/startup-jobs/engineering%20manager/1",
       "parser": "index",
-      "location": "California",
       "enabled": true
     },
     {
@@ -37,7 +33,6 @@
       "name": "New Enterprise Associates (NEA)",
       "url": "https://careers.nea.com/jobs",
       "parser": "consider",
-      "location": "California",
       "enabled": true
     },
     {
@@ -45,7 +40,6 @@
       "name": "Foresite Capital",
       "url": "https://careers.foresitecapital.com/jobs",
       "parser": "consider",
-      "location": "California",
       "enabled": true
     },
     {
@@ -53,7 +47,6 @@
       "name": "Kleiner Perkins",
       "url": "https://jobs.kleinerperkins.com/jobs",
       "parser": "consider",
-      "location": "California",
       "enabled": true
     },
     {
@@ -61,7 +54,6 @@
       "name": "Bessemer Venture Partners",
       "url": "https://jobs.bvp.com/jobs",
       "parser": "consider",
-      "location": "California",
       "enabled": true
     },
     {
@@ -69,7 +61,6 @@
       "name": "Lightspeed",
       "url": "https://jobs.lsvp.com/jobs",
       "parser": "consider",
-      "location": "California",
       "enabled": true
     },
     {
@@ -77,7 +68,6 @@
       "name": "Thrive Capital",
       "url": "https://jobs.thrivecap.com/jobs",
       "parser": "getro",
-      "location": "New York",
       "enabled": true
     },
     {
@@ -85,7 +75,6 @@
       "name": "Alumni Ventures",
       "url": "https://jobs.av.vc/jobs",
       "parser": "getro",
-      "location": "New Hampshire",
       "enabled": true
     },
     {
@@ -93,7 +82,6 @@
       "name": "Lux Capital",
       "url": "https://jobs.luxcapital.com/jobs",
       "parser": "getro",
-      "location": "New York",
       "enabled": true
     },
     {
@@ -101,7 +89,6 @@
       "name": "Menlo Ventures",
       "url": "https://jobs.menlovc.com/jobs",
       "parser": "getro",
-      "location": "California",
       "enabled": true
     },
     {
@@ -109,7 +96,6 @@
       "name": "B Capital",
       "url": "https://jobs.b.capital/jobs",
       "parser": "getro",
-      "location": "California",
       "enabled": true
     },
     {
@@ -117,7 +103,6 @@
       "name": "The Column Group",
       "url": "https://jobs.thecolumngroup.com/jobs",
       "parser": "consider",
-      "location": "California",
       "enabled": true
     },
     {
@@ -125,7 +110,6 @@
       "name": "Khosla Ventures",
       "url": "https://jobs.khoslaventures.com/jobs",
       "parser": "getro",
-      "location": "California",
       "enabled": true
     },
     {
@@ -133,7 +117,6 @@
       "name": "Venrock",
       "url": "https://jobs.venrock.com/jobs",
       "parser": "getro",
-      "location": "California",
       "enabled": true
     },
     {
@@ -141,7 +124,6 @@
       "name": "DCVC",
       "url": "https://jobs.dcvc.com/jobs",
       "parser": "getro",
-      "location": "California",
       "enabled": true
     },
     {
@@ -149,7 +131,6 @@
       "name": "Battery Ventures",
       "url": "https://jobs.battery.com/jobs",
       "parser": "consider",
-      "location": "Massachusetts",
       "enabled": true
     },
     {
@@ -157,7 +138,6 @@
       "name": "Bain Capital Ventures",
       "url": "https://jobs.baincapitalventures.com/jobs",
       "parser": "consider",
-      "location": "California",
       "enabled": true
     },
     {
@@ -165,7 +145,6 @@
       "name": "SOSV",
       "url": "https://techjobs.sosv.com/jobs",
       "parser": "consider",
-      "location": "New Jersey",
       "enabled": true
     },
     {
@@ -173,7 +152,6 @@
       "name": "Sapphire Ventures",
       "url": "https://jobs.sapphireventures.com/jobs",
       "parser": "getro",
-      "location": "California",
       "enabled": true
     },
     {
@@ -181,7 +159,6 @@
       "name": "DNX Ventures",
       "url": "https://jobs.dnx.vc/jobs",
       "parser": "getro",
-      "location": "California",
       "enabled": true
     },
     {
@@ -189,7 +166,6 @@
       "name": "Greylock Partners",
       "url": "https://jobs.greylock.com/jobs",
       "parser": "consider",
-      "location": "California",
       "enabled": true
     },
     {
@@ -197,7 +173,6 @@
       "name": "Insight Partners",
       "url": "https://jobs.insightpartners.com/jobs",
       "parser": "getro",
-      "location": "New York",
       "enabled": true
     },
     {
@@ -205,7 +180,6 @@
       "name": "Redpoint Ventures",
       "url": "https://careers.redpoint.com/jobs",
       "parser": "getro",
-      "location": "California",
       "enabled": true
     },
     {
@@ -213,7 +187,6 @@
       "name": "SignalFire",
       "url": "https://jobs.signalfire.com/jobs",
       "parser": "getro",
-      "location": "California",
       "enabled": true
     },
     {
@@ -221,7 +194,6 @@
       "name": "Sequoia Capital",
       "url": "https://jobs.sequoiacap.com/jobs",
       "parser": "consider",
-      "location": "California",
       "enabled": true
     },
     {
@@ -229,7 +201,6 @@
       "name": "Contrary",
       "url": "https://jobs.contrary.com/jobs",
       "parser": "consider",
-      "location": "California",
       "enabled": true
     },
     {
@@ -237,7 +208,6 @@
       "name": "Antler",
       "url": "https://careers.antler.co/jobs",
       "parser": "getro",
-      "location": "Singapore",
       "enabled": true
     },
     {
@@ -245,7 +215,6 @@
       "name": "BITKRAFT Ventures",
       "url": "https://careers.bitkraft.vc/jobs",
       "parser": "getro",
-      "location": "California",
       "enabled": true
     },
     {
@@ -253,7 +222,6 @@
       "name": "GV (Google Ventures)",
       "url": "https://jobs.gv.com/jobs",
       "parser": "consider",
-      "location": "California",
       "enabled": true
     },
     {
@@ -261,7 +229,6 @@
       "name": "Techstars",
       "url": "https://jobs.techstars.com/jobs",
       "parser": "getro",
-      "location": "Colorado",
       "enabled": true
     },
     {
@@ -269,7 +236,6 @@
       "name": "Newchip Accelerator",
       "url": "https://consider.com/boards/co/newchip-accelerator",
       "parser": "consider",
-      "location": "Texas",
       "enabled": true
     },
     {
@@ -277,7 +243,6 @@
       "name": "SV Angel",
       "url": "https://jobs.svangel.com/jobs",
       "parser": "getro",
-      "location": "California",
       "enabled": true
     },
     {
@@ -285,7 +250,6 @@
       "name": "Plug and Play",
       "url": "https://jobs.pnptc.com/jobs",
       "parser": "getro",
-      "location": "California",
       "enabled": true
     },
     {
@@ -293,7 +257,6 @@
       "name": "Coatue",
       "url": "https://jobs.coatue.com/jobs",
       "parser": "getro",
-      "location": "New York",
       "enabled": true
     },
     {
@@ -301,7 +264,6 @@
       "name": "Union Square Ventures",
       "url": "https://jobs.usv.com/jobs",
       "parser": "consider",
-      "location": "New York",
       "enabled": true
     },
     {
@@ -309,7 +271,6 @@
       "name": "TCV",
       "url": "https://portfoliojobs.tcv.com/jobs",
       "parser": "getro",
-      "location": "California",
       "enabled": true
     },
     {
@@ -317,15 +278,13 @@
       "name": "NFX",
       "url": "https://jobs.nfx.com/jobs",
       "parser": "getro",
-      "location": "California",
       "enabled": true
     },
     {
       "id": "yc",
       "name": "Y Combinator",
-      "url": "https://www.workatastartup.com/jobs/l/software-engineer",
+      "url": "https://www.ycombinator.com/jobs/role/software-engineer",
       "parser": "yc",
-      "location": "California",
       "enabled": true
     }
   ]
