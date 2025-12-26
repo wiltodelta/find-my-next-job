@@ -16,3 +16,4 @@ env/
 # Job scraper output
 state.json
 new_jobs/
+yc_auth_state.json

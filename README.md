@@ -57,6 +57,21 @@ Combine source and days filter:
 uv run python job_checker.py --ids yc --days 30
 ```
 
+### YC Work at a Startup (requires login)
+
+Y Combinator's Work at a Startup requires authentication. Login once to save your session:
+
+```bash
+uv run python job_checker.py --login
+```
+
+This opens a browser window. Log in with your YC account, then press Enter in the terminal to save the session. The auth state is saved to `yc_auth_state.json` (excluded from git).
+
+After login, you can scrape YC:
+```bash
+uv run python job_checker.py --ids yc
+```
+
 ## Configuration
 
 ### Sources
@@ -92,8 +107,8 @@ Sources are sorted by rank from [TIME's America's Top Venture Capital Firms of 2
 |--------|----------|-------------------|-------------|
 | `consider` | [Consider.co](https://consider.co) | `?jobTypes=...` | Most VC portfolio boards |
 | `getro` | [Getro](https://www.getro.com) | `?q=...` | Alternative job board platform |
-| `yc` | Y Combinator | None | Work at a Startup |
-| `index` | Index Ventures | None | Custom startup jobs board |
+| `yc` | [Work at a Startup](https://www.workatastartup.com) | URL params | Requires login (see above) |
+| `index` | Index Ventures | None | Custom startup jobs board with pagination |
 
 **How to identify parser type:**
 1. Open the job board URL in browser
@@ -123,6 +138,7 @@ Edit `config.py` to:
 
 - `state.json` - Tracks last scrape time and known job URLs per source
 - `new_jobs/new_jobs_YYYY-MM-DD_HH-MM-SS.json` - New jobs found in each run
+- `yc_auth_state.json` - Browser session for YC (created by `--login`, excluded from git)
 
 ### Job fields
 

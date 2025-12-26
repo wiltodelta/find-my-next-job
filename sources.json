@@ -283,7 +283,7 @@
     {
       "id": "yc",
       "name": "Y Combinator",
-      "url": "https://www.ycombinator.com/jobs/role/software-engineer",
+      "url": "https://www.workatastartup.com/companies?demographic=any&hasEquity=any&hasSalary=any&industry=any&interviewProcess=any&jobType=fulltime&layout=list-compact&role=eng&role_type=eng_mgmt&sortBy=created_desc&tab=any&usVisaNotRequired=any",
       "parser": "yc",
       "enabled": true
     }

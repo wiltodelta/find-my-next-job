@@ -26,6 +26,9 @@ from playwright.async_api import TimeoutError as PlaywrightTimeout
 
 from config import DEFAULT_DAYS_THRESHOLD, JOB_TITLE_KEYWORDS, URL_FILTERS
 
+# Auth state file for sites requiring login (e.g., YC Work at a Startup)
+AUTH_STATE_FILE = Path(__file__).parent / "yc_auth_state.json"
+
 
 @dataclass
 class Job:
@@ -446,138 +449,122 @@ async def scrape_getro_site(
 
 async def scrape_yc_jobs(page: Page, source_id: str, source_name: str, url: str, days_threshold: int = 7) -> list[Job]:
     """
-    Scrape jobs from Y Combinator's Work at a Startup.
+    Scrape jobs from Y Combinator's Work at a Startup (workatastartup.com).
 
-    Page structure:
-    - Company link: "Company (Batch) Description (X days ago)"
-    - Job title link: below company link
-    - Metadata div: "fulltime Location / Remote Type"
+    DOM structure (list-compact layout):
+    - Company card container with company info and job listings
+    - span.company-name: company name
+    - a[href*="/jobs/"].font-medium: job title and URL
+    - Metadata spans after job title: location, job type, etc.
+    - Date in company link text: "(X days ago)" or "(about X hours ago)"
 
-    Note: Page content is randomly populated, so we load it multiple times
-    to collect more jobs.
+    Requires login - use --login flag first to save auth state.
     """
     seen_urls: set[str] = set()
     jobs: list[Job] = []
 
-    # Load page multiple times as content is randomly populated
-    num_loads = 5
-
     try:
-        for load_num in range(num_loads):
-            await page.goto(url, wait_until="networkidle", timeout=30000)
-            await page.wait_for_timeout(2000)
+        await page.goto(url, wait_until="networkidle", timeout=30000)
+        await page.wait_for_timeout(3000)
 
-            # Scroll to load more content
-            for _ in range(3):
-                await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                await page.wait_for_timeout(500)
+        # Scroll to load more content
+        for _ in range(5):
+            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            await page.wait_for_timeout(1000)
 
-            # Find all job title links
-            job_links = await page.query_selector_all('a[href*="/jobs/"]')
-            load_jobs_count = 0
-
-            for job_link in job_links:
-                try:
-                    title = await job_link.inner_text()
-                    href = await job_link.evaluate("el => el.href")
-                    href = clean_job_url(href, url)
-
-                    if not title or not href:
-                        continue
-
-                    if href in seen_urls:
-                        continue
-
-                    # Filter by manager keywords early
-                    if not matches_job_title_keywords(title):
-                        continue
-
-                    # Find parent container for job card (climb up to find company)
-                    card = await job_link.evaluate_handle(
-                        """el => {
-                            let parent = el.parentElement;
-                            for (let i = 0; i < 6 && parent; i++) {
-                                if (parent.querySelector('span.font-bold')) {
-                                    return parent;
-                                }
-                                parent = parent.parentElement;
+        # Extract all jobs using JavaScript for better performance
+        jobs_data = await page.evaluate(
+            """() => {
+                const results = [];
+                const jobLinks = document.querySelectorAll('a[href*="/jobs/"].font-medium');
+                const dateRe = /\\((\\d+\\s+days?\\s+ago|about\\s+\\d+\\s+hours?\\s+ago|today|yesterday)\\)/i;
+                for (const jobLink of jobLinks) {
+                    try {
+                        const title = jobLink.textContent?.trim();
+                        const href = jobLink.href;
+                        if (!title || !href) continue;
+                        let container = jobLink;
+                        for (let i = 0; i < 10 && container; i++) {
+                            if (container.querySelector && container.querySelector('span.company-name')) break;
+                            container = container.parentElement;
+                        }
+                        if (!container) continue;
+                        const companyEl = container.querySelector('span.company-name');
+                        const company = companyEl?.textContent?.trim() || null;
+                        const companyLink = container.querySelector('a[href*="/companies/"]');
+                        let dateText = null;
+                        if (companyLink) {
+                            const linkText = companyLink.textContent || '';
+                            const dateMatch = linkText.match(dateRe);
+                            if (dateMatch) dateText = dateMatch[1];
+                        }
+                        const jobNameDiv = jobLink.closest('.job-name');
+                        let location = null;
+                        if (jobNameDiv) {
+                            const metaDiv = jobNameDiv.nextElementSibling;
+                            if (metaDiv) {
+                                const firstSpan = metaDiv.querySelector('span');
+                                if (firstSpan) location = firstSpan.textContent?.trim() || null;
                             }
-                            return el.parentElement?.parentElement?.parentElement;
-                        }"""
-                    )
+                        }
+                        results.push({ title, url: href, company, location, date: dateText });
+                    } catch (e) { continue; }
+                }
+                return results;
+            }"""
+        )
 
-                    if not card:
-                        continue
+        for job_data in jobs_data:
+            try:
+                href = job_data.get("url", "")
+                title = job_data.get("title", "")
 
-                    # Extract data using precise selectors based on YC DOM structure:
-                    # - Company: span.block.font-bold or span.font-bold
-                    # - Location: div.break-all
-                    # - Date: span.text-gray-400
-                    card_data = await card.evaluate(  # type: ignore
-                        """el => {
-                            const data = { company: null, location: null, date: null };
-
-                            // Company: span with font-bold class
-                            const companyEl = el.querySelector('span.font-bold');
-                            if (companyEl) {
-                                data.company = companyEl.textContent?.trim();
-                            }
-
-                            // Location: div with break-all class
-                            const locationEl = el.querySelector('.break-all');
-                            if (locationEl) {
-                                data.location = locationEl.textContent?.trim();
-                            }
-
-                            // Date: span with text-gray-400 class, contains "(X days ago)"
-                            const dateEl = el.querySelector('span.text-gray-400');
-                            if (dateEl) {
-                                let dateText = dateEl.textContent?.trim() || '';
-                                // Remove parentheses: "(8 days ago)" -> "8 days ago"
-                                dateText = dateText.replace(/^\\(|\\)$/g, '');
-                                data.date = dateText;
-                            }
-
-                            return data;
-                        }"""
-                    )
-
-                    company = card_data.get("company") if card_data else None
-                    location = card_data.get("location") if card_data else None
-                    date_text = card_data.get("date") if card_data else None
-
-                    days_ago = None
-                    posted_date = None
-
-                    if date_text:
-                        days_ago = parse_relative_date(date_text)
-                        if days_ago is not None:
-                            posted_date = (datetime.now() - timedelta(days=days_ago)).date().isoformat()
-
-                    # Filter by days threshold
-                    if days_ago is not None and days_ago > days_threshold:
-                        continue
-
-                    seen_urls.add(href)
-                    load_jobs_count += 1
-
-                    jobs.append(
-                        Job(
-                            title=title.strip(),
-                            company=company.strip() if company else None,
-                            source_id=source_id,
-                            url=href,
-                            location=location.strip() if location else None,
-                            posted_date=posted_date,
-                            days_ago=days_ago,
-                        )
-                    )
-
-                except Exception:
+                if not title or not href:
                     continue
 
-            if load_num < num_loads - 1:
-                print(f"    Load {load_num + 1}/{num_loads}: {load_jobs_count} new jobs")
+                href = clean_job_url(href, url)
+
+                if href in seen_urls:
+                    continue
+
+                # Filter by manager keywords
+                if not matches_job_title_keywords(title):
+                    continue
+
+                company = job_data.get("company")
+                location = job_data.get("location")
+                date_text = job_data.get("date")
+
+                days_ago = None
+                posted_date = None
+
+                if date_text:
+                    days_ago = parse_relative_date(date_text)
+                    if days_ago is not None:
+                        posted_date = (datetime.now() - timedelta(days=days_ago)).date().isoformat()
+
+                # Filter by days threshold
+                if days_ago is not None and days_ago > days_threshold:
+                    continue
+
+                seen_urls.add(href)
+
+                jobs.append(
+                    Job(
+                        title=title.strip(),
+                        company=company.strip() if company else None,
+                        source_id=source_id,
+                        url=href,
+                        location=location.strip() if location else None,
+                        posted_date=posted_date,
+                        days_ago=days_ago,
+                    )
+                )
+
+            except Exception:
+                continue
+
+        print(f"    Found {len(jobs)} matching jobs")
 
     except PlaywrightTimeout:
         print(f"  Timeout loading {source_name}")
@@ -937,6 +924,37 @@ def update_state(
     return state
 
 
+async def login_yc():
+    """
+    Interactive login to YC Work at a Startup.
+
+    Opens a browser window for manual login. After successful login,
+    saves the browser state to AUTH_STATE_FILE for future use.
+    """
+    print("Opening browser for YC Work at a Startup login...")
+    print("Please log in manually. The browser will close automatically after login.")
+    print()
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=False)
+        context = await browser.new_context()
+        page = await context.new_page()
+
+        # Navigate to login page
+        await page.goto("https://www.workatastartup.com/companies")
+
+        # Wait for user to log in and press Enter
+        print("Log in to your account, then press Enter to save the session...")
+        input()
+
+        # Save browser state
+        await context.storage_state(path=str(AUTH_STATE_FILE))
+        print(f"Auth state saved to: {AUTH_STATE_FILE}")
+
+        await browser.close()
+        return True
+
+
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
@@ -950,6 +968,7 @@ Examples:
   python job_checker.py --days 14            # Scrape with 14 days threshold
   python job_checker.py --ids yc --days 30   # Scrape YC with 30 days threshold
   python job_checker.py --list               # List available source IDs
+  python job_checker.py --login              # Login to YC Work at a Startup
         """,
     )
     parser.add_argument(
@@ -962,6 +981,9 @@ Examples:
     )
     parser.add_argument(
         "--list", "-l", action="store_true", dest="list_sources", help="List available source IDs and exit"
+    )
+    parser.add_argument(
+        "--login", action="store_true", help="Login to YC Work at a Startup (saves auth state for future runs)"
     )
     parser.add_argument(
         "--days",
@@ -1002,6 +1024,13 @@ async def main():
             print(f"  {source.id:<20} {source.name}")
         return
 
+    # Handle --login flag
+    if args.login:
+        success = await login_yc()
+        if success:
+            print("Login successful! You can now scrape YC with: python job_checker.py --ids yc")
+        return
+
     # Filter sources by IDs if specified
     if args.source_ids:
         requested_ids = set(args.source_ids)
@@ -1039,13 +1068,35 @@ async def main():
 
     all_jobs: list[Job] = []
 
+    # Check if we need auth for YC
+    has_auth_state = AUTH_STATE_FILE.exists()
+    yc_sources = [s for s in sources if s.parser == "yc"]
+
+    if yc_sources and not has_auth_state:
+        print("\nSkipping YC sources (no auth). Run: python job_checker.py --login")
+        sources = [s for s in sources if s.parser != "yc"]
+
+    if not sources:
+        print("No sources to scrape.")
+        return
+
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         user_agent = (
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
             "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         )
-        context = await browser.new_context(user_agent=user_agent)
+
+        # Create context with auth state if available (for YC)
+        if has_auth_state:
+            print(f"\nUsing saved auth state from: {AUTH_STATE_FILE}")
+            context = await browser.new_context(
+                user_agent=user_agent,
+                storage_state=str(AUTH_STATE_FILE),
+            )
+        else:
+            context = await browser.new_context(user_agent=user_agent)
+
         page = await context.new_page()
 
         for source in sources:
