@@ -212,12 +212,17 @@ async def scrape_consider_site(
     """
     Scrape jobs from Consider.co platform sites (a16z, Sequoia, Battery, etc.).
 
-    DOM structure:
+    DOM structure (standard view):
     - div.job-list-job: job card container
     - a.job-list-job-company-link: company name
     - h2.job-list-job-title a / h3.job-list-job-title a: job title and URL
     - .job-list-badge-locations: location
     - .job-list-badge-posted: date (e.g., "Posted less than 1 day ago")
+
+    DOM structure (grouped view - e.g., Sequoia):
+    - div.grouped-job-result: company container
+    - img[alt*="logo"]: company logo with name in alt (e.g., "Harvey logo")
+    - div.job-list-job: job cards inside company container
     """
     jobs = []
     seen_urls = set()
@@ -251,9 +256,25 @@ async def scrape_consider_site(
                 if href in seen_urls:
                     continue
 
-                # Extract company from a.job-list-job-company-link
+                # Extract company: first try standard view, then grouped view
                 company_el = await card.query_selector("a.job-list-job-company-link")
                 company = await company_el.inner_text() if company_el else None
+
+                # If no company found, try grouped view (parent container with logo)
+                if not company:
+                    company = await card.evaluate(
+                        """el => {
+                            const grouped = el.closest('.grouped-job-result');
+                            if (grouped) {
+                                const logo = grouped.querySelector('img[alt*="logo"]');
+                                if (logo && logo.alt) {
+                                    // Remove " logo" suffix from alt text
+                                    return logo.alt.replace(/ logo$/i, '');
+                                }
+                            }
+                            return null;
+                        }"""
+                    )
 
                 # Extract location from .job-list-badge-locations
                 location_el = await card.query_selector(".job-list-badge-locations")
