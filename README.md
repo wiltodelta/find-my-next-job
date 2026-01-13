@@ -2,6 +2,28 @@
 
 Job scraper for VC portfolio job boards. Configure it to search for any position type.
 
+## Quick start
+
+```bash
+# Install dependencies
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv sync
+uv run playwright install chromium
+
+# Edit config.py to change what you're searching for
+# Look for URL_FILTERS section and change the job type
+
+# (Optional) Login to YC Work at a Startup for more jobs
+uv run python job_checker.py --login
+
+# Run the scraper
+uv run python job_checker.py
+```
+
+Results are saved to `new_jobs/` folder.
+
+---
+
 ## Requirements
 
 - Python 3.13+
