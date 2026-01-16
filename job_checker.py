@@ -24,7 +24,7 @@ from pathlib import Path
 from playwright.async_api import Page, async_playwright
 from playwright.async_api import TimeoutError as PlaywrightTimeout
 
-from config import DEFAULT_DAYS_THRESHOLD, JOB_TITLE_KEYWORDS, URL_FILTERS
+from config import DEFAULT_DAYS_THRESHOLD, JOB_TITLE_KEYWORDS, LOCATION_KEYWORDS, URL_FILTERS
 
 # Auth state file for sites requiring login (e.g., YC Work at a Startup)
 AUTH_STATE_FILE = Path(__file__).parent / "yc_auth_state.json"
@@ -131,6 +131,19 @@ def matches_job_title_keywords(title: str) -> bool:
     """Check if job title matches configured keywords."""
     title_lower = title.lower()
     return any(keyword in title_lower for keyword in JOB_TITLE_KEYWORDS)
+
+
+def matches_location_keywords(location: str | None) -> bool:
+    """Check if job location matches configured keywords.
+
+    Returns True if:
+    - location is None (include jobs without location info)
+    - location contains any of the configured keywords
+    """
+    if location is None:
+        return True
+    location_lower = location.lower()
+    return any(keyword in location_lower for keyword in LOCATION_KEYWORDS)
 
 
 def clean_job_url(href: str, source_url: str) -> str:
@@ -1148,6 +1161,13 @@ async def main():
         else:
             # Include jobs without date info
             filtered_jobs.append(job)
+
+    # Filter jobs by location
+    location_filtered_jobs = [job for job in filtered_jobs if matches_location_keywords(job.location)]
+    filtered_out_count = len(filtered_jobs) - len(location_filtered_jobs)
+    if filtered_out_count > 0:
+        print(f"Filtered out {filtered_out_count} jobs by location")
+    filtered_jobs = location_filtered_jobs
 
     # Find new jobs since last scrape
     new_jobs = find_new_jobs(filtered_jobs, state)

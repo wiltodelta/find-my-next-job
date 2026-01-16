@@ -18,6 +18,30 @@ JOB_TITLE_KEYWORDS = [
     "head of engineering",
 ]
 
+# Location keywords for filtering jobs (case-insensitive)
+# Jobs are included if location contains any of these keywords, or if location is None
+LOCATION_KEYWORDS = [
+    "ca",
+    "ca ",
+    "california",
+    "san francisco",
+    "mountain view",
+    "palo alto",
+    "san jose",
+    "los gatos",
+    "sunnyvale",
+    "santa clara",
+    "cupertino",
+    "menlo park",
+    "redwood city",
+    "remote",
+    "anywhere",
+    "usa",
+    "us,",
+    "us ",
+    "united states",
+]
+
 # URL filter parameters for different platforms
 # These are appended to base URLs when loading sources
 URL_FILTERS = {

@@ -152,6 +152,7 @@ Sources are sorted by rank from [TIME's America's Top Venture Capital Firms of 2
 Edit `config.py` to:
 - Change default days threshold (`DEFAULT_DAYS_THRESHOLD`)
 - Modify job title keywords (`JOB_TITLE_KEYWORDS`) - used for sources without URL-based filtering
+- Modify location keywords (`LOCATION_KEYWORDS`) - filters jobs by location (default: Bay Area cities, CA, Remote, USA)
 - Configure URL filter parameters for different platforms (`URL_FILTERS`):
   - `consider`: e.g., `jobTypes=Engineering+Manager` or `jobTypes=Software+Engineer`
   - `getro`: e.g., `q=engineering%20manager` or `q=backend%20developer`
