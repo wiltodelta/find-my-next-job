@@ -1,4 +1,9 @@
-# AGENTS.md
+---
+description: Project rules for code quality, documentation, and language standards
+alwaysApply: true
+---
+
+# Project Rules
 
 ## Code Quality
 
@@ -6,7 +11,7 @@
 
 ## Documentation
 
-- Update documentation (README.md, AGENTS.md) when you change functionality or add new features.
+- Update documentation (README.md, .cursor/rules/*.mdc) when you change functionality or add new features.
 
 ## Language
 
