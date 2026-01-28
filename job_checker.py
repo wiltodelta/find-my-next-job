@@ -388,7 +388,7 @@ async def scrape_getro_site(
 
                 # Extract data using schema.org microdata selectors
                 card_data = await container.evaluate(  # type: ignore
-                    """el => {
+                    r"""el => {
                         const data = {
                             title: null, company: null, location: null, datePosted: null
                         };
