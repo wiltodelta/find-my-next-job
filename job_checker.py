@@ -414,7 +414,9 @@ async def scrape_getro_site(
                         // 1. meta[itemprop="addressLocality"] inside div[itemprop="jobLocation"]
                         const jobLocationDiv = el.querySelector('div[itemprop="jobLocation"]');
                         if (jobLocationDiv) {
-                            const addressLocalityMeta = jobLocationDiv.querySelector('meta[itemprop="addressLocality"]');
+                            const addressLocalityMeta = jobLocationDiv.querySelector(
+                                'meta[itemprop="addressLocality"]'
+                            );
                             if (addressLocalityMeta) {
                                 data.location = addressLocalityMeta.getAttribute('content');
                             }
@@ -427,13 +429,13 @@ async def scrape_getro_site(
                                 const text = span.textContent?.trim() || '';
                                 // Location patterns: contains comma, or common location keywords
                                 if (text && text.length > 2 && text.length < 100) {
-                                    if (text.includes(',') || 
-                                        text.includes('USA') || 
-                                        text.includes('UK') || 
+                                    if (text.includes(',') ||
+                                        text.includes('USA') ||
+                                        text.includes('UK') ||
                                         text.includes('Remote') ||
                                         text.match(/^[A-Z][a-z]+,\s*[A-Z]{2}/)) {
                                         // Check it's not a date or job type
-                                        if (!text.match(/^(fulltime|parttime|contract|intern)$/i) && 
+                                        if (!text.match(/^(fulltime|parttime|contract|intern)$/i) &&
                                             !text.match(/^\d+ (day|week|month)s? ago$/i) &&
                                             !text.match(/^(Today|Yesterday)$/i)) {
                                             data.location = text;
