@@ -18,6 +18,18 @@ JOB_TITLE_KEYWORDS = [
     "head of engineering",
 ]
 
+# Keywords to exclude from job titles (case-insensitive)
+# Jobs matching JOB_TITLE_KEYWORDS but containing any of these are excluded
+JOB_TITLE_EXCLUDE_KEYWORDS = [
+    "site reliability",
+    "infrastructure",
+    "quality",
+    "compute",
+    "network",
+    "observability",
+    "data",
+]
+
 # Location keywords for filtering jobs (case-insensitive)
 # Jobs are included if location contains any of these keywords, or if location is None
 LOCATION_KEYWORDS = [

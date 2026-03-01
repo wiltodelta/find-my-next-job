@@ -24,7 +24,13 @@ from pathlib import Path
 from playwright.async_api import Page, async_playwright
 from playwright.async_api import TimeoutError as PlaywrightTimeout
 
-from config import DEFAULT_DAYS_THRESHOLD, JOB_TITLE_KEYWORDS, LOCATION_KEYWORDS, URL_FILTERS
+from config import (
+    DEFAULT_DAYS_THRESHOLD,
+    JOB_TITLE_EXCLUDE_KEYWORDS,
+    JOB_TITLE_KEYWORDS,
+    LOCATION_KEYWORDS,
+    URL_FILTERS,
+)
 
 # Auth state file for sites requiring login (e.g., YC Work at a Startup)
 AUTH_STATE_FILE = Path(__file__).parent / "yc_auth_state.json"
@@ -128,9 +134,13 @@ def load_sources(filepath: Path) -> list[Source]:
 
 
 def matches_job_title_keywords(title: str) -> bool:
-    """Check if job title matches configured keywords."""
+    """Check if job title matches configured keywords and doesn't match exclusions."""
     title_lower = title.lower()
-    return any(keyword in title_lower for keyword in JOB_TITLE_KEYWORDS)
+    if not any(keyword in title_lower for keyword in JOB_TITLE_KEYWORDS):
+        return False
+    if any(keyword in title_lower for keyword in JOB_TITLE_EXCLUDE_KEYWORDS):
+        return False
+    return True
 
 
 def matches_location_keywords(location: str | None) -> bool:
