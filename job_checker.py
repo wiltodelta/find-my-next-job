@@ -7,19 +7,18 @@ to timestamped JSON files. Tracks last scrape time per source to identify
 fresh listings.
 
 Usage:
-    python job_checker.py
-
-Requirements:
-    - playwright (install with: pip install playwright && playwright install chromium)
+    uv run python job_checker.py
 """
 
 import argparse
 import asyncio
 import json
+import logging
 import re
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 from playwright.async_api import Page, async_playwright
 from playwright.async_api import TimeoutError as PlaywrightTimeout
@@ -31,6 +30,8 @@ from config import (
     LOCATION_KEYWORDS,
     URL_FILTERS,
 )
+
+log = logging.getLogger(__name__)
 
 # Auth state file for sites requiring login (e.g., YC Work at a Startup)
 AUTH_STATE_FILE = Path(__file__).parent / "yc_auth_state.json"
@@ -50,9 +51,9 @@ class Job:
     scraped_at: str = ""
     potential_duplicate: bool = False  # True if same company+title seen recently
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if not self.scraped_at:
-            self.scraped_at = datetime.now().isoformat()
+            self.scraped_at = datetime.now(tz=UTC).isoformat()
 
     def get_duplicate_key(self) -> str | None:
         """
@@ -72,7 +73,7 @@ class SourceState:
     """Tracks state for a job source."""
 
     last_scraped: str  # ISO datetime of last scrape
-    known_job_urls: list[str] = field(default_factory=list)
+    known_job_urls: list[str] = field(default_factory=lambda: [])  # noqa: PIE807
 
 
 @dataclass
@@ -100,8 +101,7 @@ def apply_url_filter(url: str, parser: str) -> str:
     # Add filter parameter
     if "?" in url:
         return f"{url}&{filter_param}"
-    else:
-        return f"{url}?{filter_param}"
+    return f"{url}?{filter_param}"
 
 
 def load_sources(filepath: Path) -> list[Source]:
@@ -112,8 +112,8 @@ def load_sources(filepath: Path) -> list[Source]:
 
     try:
         with open(filepath, encoding="utf-8") as f:
-            data = json.load(f)
-            sources = []
+            data: dict[str, Any] = json.load(f)
+            sources: list[Source] = []
             for s in data.get("sources", []):
                 if s.get("enabled", True):
                     parser = s["parser"]
@@ -138,9 +138,7 @@ def matches_job_title_keywords(title: str) -> bool:
     title_lower = title.lower()
     if not any(keyword in title_lower for keyword in JOB_TITLE_KEYWORDS):
         return False
-    if any(keyword in title_lower for keyword in JOB_TITLE_EXCLUDE_KEYWORDS):
-        return False
-    return True
+    return not any(keyword in title_lower for keyword in JOB_TITLE_EXCLUDE_KEYWORDS)
 
 
 def matches_location_keywords(location: str | None) -> bool:
@@ -247,8 +245,8 @@ async def scrape_consider_site(
     - img[alt*="logo"]: company logo with name in alt (e.g., "Harvey logo")
     - div.job-list-job: job cards inside company container
     """
-    jobs = []
-    seen_urls = set()
+    jobs: list[Job] = []
+    seen_urls: set[str] = set()
 
     try:
         await page.goto(url, wait_until="networkidle", timeout=30000)
@@ -313,7 +311,7 @@ async def scrape_consider_site(
                 if date_text:
                     days_ago = parse_relative_date(date_text)
                     if days_ago is not None:
-                        posted_date = (datetime.now() - timedelta(days=days_ago)).date().isoformat()
+                        posted_date = (datetime.now(tz=UTC) - timedelta(days=days_ago)).date().isoformat()
 
                 # Filter by days threshold
                 if days_ago is not None and days_ago > days_threshold:
@@ -337,6 +335,7 @@ async def scrape_consider_site(
                     )
                 )
             except Exception:
+                log.debug("Failed to parse job card in %s", source_name, exc_info=True)
                 continue
 
     except PlaywrightTimeout:
@@ -360,8 +359,8 @@ async def scrape_getro_site(
     - meta[itemprop="address"]: location
     - meta[itemprop="datePosted"]: date in ISO format (YYYY-MM-DD)
     """
-    jobs = []
-    seen_urls = set()
+    jobs: list[Job] = []
+    seen_urls: set[str] = set()
 
     try:
         await page.goto(url, wait_until="networkidle", timeout=30000)
@@ -483,8 +482,8 @@ async def scrape_getro_site(
 
                 if date_posted_str:
                     try:
-                        posted = datetime.strptime(date_posted_str, "%Y-%m-%d")
-                        days_ago = (datetime.now() - posted).days
+                        posted = datetime.strptime(date_posted_str, "%Y-%m-%d").replace(tzinfo=UTC)
+                        days_ago = (datetime.now(tz=UTC) - posted).days
                         posted_date = posted.date().isoformat()
                     except ValueError:
                         pass
@@ -511,6 +510,7 @@ async def scrape_getro_site(
                     )
                 )
             except Exception:
+                log.debug("Failed to parse job card in %s", source_name, exc_info=True)
                 continue
 
     except PlaywrightTimeout:
@@ -615,7 +615,7 @@ async def scrape_yc_jobs(page: Page, source_id: str, source_name: str, url: str,
                 if date_text:
                     days_ago = parse_relative_date(date_text)
                     if days_ago is not None:
-                        posted_date = (datetime.now() - timedelta(days=days_ago)).date().isoformat()
+                        posted_date = (datetime.now(tz=UTC) - timedelta(days=days_ago)).date().isoformat()
 
                 # Filter by days threshold
                 if days_ago is not None and days_ago > days_threshold:
@@ -636,6 +636,7 @@ async def scrape_yc_jobs(page: Page, source_id: str, source_name: str, url: str,
                 )
 
             except Exception:
+                log.debug("Failed to parse YC job card", exc_info=True)
                 continue
 
         print(f"    Found {len(jobs)} matching jobs")
@@ -663,8 +664,8 @@ async def scrape_index_ventures(
     - ul.result__category-list__locations span: location (e.g., "Remote", "London")
     - ul.result__category-list__date span: date (e.g., "Tue, December 23, 2025")
     """
-    jobs = []
-    seen_urls = set()
+    jobs: list[Job] = []
+    seen_urls: set[str] = set()
 
     # Parse pages until we find only old jobs (>7 days)
     page_num = 1
@@ -724,8 +725,8 @@ async def scrape_index_ventures(
 
                     if date_str:
                         try:
-                            posted = datetime.strptime(date_str.strip(), "%a, %B %d, %Y")
-                            days_ago = (datetime.now() - posted).days
+                            posted = datetime.strptime(date_str.strip(), "%a, %B %d, %Y").replace(tzinfo=UTC)
+                            days_ago = (datetime.now(tz=UTC) - posted).days
                             posted_date = posted.date().isoformat()
                         except ValueError:
                             pass
@@ -755,6 +756,7 @@ async def scrape_index_ventures(
                     page_jobs_count += 1
 
                 except Exception:
+                    log.debug("Failed to parse Index Ventures job card", exc_info=True)
                     continue
 
             print(f"    Page {page_num}: {page_jobs_count} jobs added ({page_fresh_count} fresh jobs found)")
@@ -785,24 +787,23 @@ async def scrape_source(page: Page, source: Source, days_threshold: int) -> list
     """Route to the appropriate scraper based on the source parser type."""
     if source.parser == "yc":
         return await scrape_yc_jobs(page, source.id, source.name, source.url, days_threshold)
-    elif source.parser == "index":
+    if source.parser == "index":
         return await scrape_index_ventures(page, source.id, source.name, source.url, days_threshold)
-    elif source.parser == "consider":
+    if source.parser == "consider":
         return await scrape_consider_site(page, source.id, source.name, source.url, days_threshold)
-    elif source.parser == "getro":
+    if source.parser == "getro":
         return await scrape_getro_site(page, source.id, source.name, source.url, days_threshold)
-    else:
-        print(f"  Unknown parser type: {source.parser}")
-        return []
+    print(f"  Unknown parser type: {source.parser}")
+    return []
 
 
-def load_recent_jobs(new_jobs_dir: Path, days: int = 7) -> list[dict]:
+def load_recent_jobs(new_jobs_dir: Path, days: int = 7) -> list[dict[str, str]]:
     """
     Load jobs from new_jobs files within the specified number of days.
     Returns a list of job dictionaries.
     """
-    recent_jobs = []
-    cutoff_date = datetime.now() - timedelta(days=days)
+    recent_jobs: list[dict[str, str]] = []
+    cutoff_date = datetime.now(tz=UTC) - timedelta(days=days)
 
     if not new_jobs_dir.exists():
         return recent_jobs
@@ -812,11 +813,11 @@ def load_recent_jobs(new_jobs_dir: Path, days: int = 7) -> list[dict]:
             # Extract date from filename: new_jobs_2025-12-24_09-23-20.json
             filename = filepath.stem  # new_jobs_2025-12-24_09-23-20
             date_part = filename.replace("new_jobs_", "")  # 2025-12-24_09-23-20
-            file_date = datetime.strptime(date_part, "%Y-%m-%d_%H-%M-%S")
+            file_date = datetime.strptime(date_part, "%Y-%m-%d_%H-%M-%S").replace(tzinfo=UTC)
 
             if file_date >= cutoff_date:
                 with open(filepath, encoding="utf-8") as f:
-                    data = json.load(f)
+                    data: dict[str, list[dict[str, str]]] = json.load(f)
                     for job in data.get("jobs", []):
                         recent_jobs.append(job)
         except (ValueError, json.JSONDecodeError) as e:
@@ -826,12 +827,12 @@ def load_recent_jobs(new_jobs_dir: Path, days: int = 7) -> list[dict]:
     return recent_jobs
 
 
-def build_duplicate_keys(jobs: list[dict]) -> set[str]:
+def build_duplicate_keys(jobs: list[dict[str, str]]) -> set[str]:
     """
     Build a set of duplicate detection keys from job dictionaries.
     Key format: "company|title" (lowercase, stripped).
     """
-    keys = set()
+    keys: set[str] = set()
     for job in jobs:
         company = job.get("company")
         title = job.get("title")
@@ -865,9 +866,12 @@ def load_state(filepath: Path) -> dict[str, SourceState]:
 
     try:
         with open(filepath, encoding="utf-8") as f:
-            data = json.load(f)
+            data: dict[str, Any] = json.load(f)
             return {
-                source: SourceState(last_scraped=state["last_scraped"], known_job_urls=state.get("known_job_urls", []))
+                source: SourceState(
+                    last_scraped=state["last_scraped"],
+                    known_job_urls=list(state.get("known_job_urls", [])),
+                )
                 for source, state in data.get("sources", {}).items()
             }
     except Exception as e:
@@ -875,10 +879,10 @@ def load_state(filepath: Path) -> dict[str, SourceState]:
         return {}
 
 
-def save_state(state: dict[str, SourceState], filepath: Path):
+def save_state(state: dict[str, SourceState], filepath: Path) -> None:
     """Save scraping state to JSON file."""
     output = {
-        "last_updated": datetime.now().isoformat(),
+        "last_updated": datetime.now(tz=UTC).isoformat(),
         "sources": {
             source: {
                 "last_scraped": s.last_scraped,
@@ -892,7 +896,7 @@ def save_state(state: dict[str, SourceState], filepath: Path):
         json.dump(output, f, indent=2, ensure_ascii=False)
 
 
-def save_jobs(jobs: list[Job], filepath: Path, metadata: dict | None = None):
+def save_jobs(jobs: list[Job], filepath: Path, metadata: dict[str, Any] | None = None) -> None:
     """Save jobs to JSON file, sorted from newest to oldest by posted_date."""
     # Sort by posted_date descending (newest first), jobs without date at the end
     sorted_jobs = sorted(jobs, key=lambda j: j.posted_date or "0000-00-00", reverse=True)
@@ -900,8 +904,8 @@ def save_jobs(jobs: list[Job], filepath: Path, metadata: dict | None = None):
     # Exclude days_ago (temporary field) and False-valued potential_duplicate
     exclude_fields = {"days_ago"}
 
-    def job_to_dict(job: Job) -> dict:
-        result = {}
+    def job_to_dict(job: Job) -> dict[str, Any]:
+        result: dict[str, Any] = {}
         for k, v in asdict(job).items():
             if k in exclude_fields:
                 continue
@@ -913,8 +917,8 @@ def save_jobs(jobs: list[Job], filepath: Path, metadata: dict | None = None):
             result[k] = v
         return result
 
-    output = {
-        "scraped_at": datetime.now().isoformat(),
+    output: dict[str, Any] = {
+        "scraped_at": datetime.now(tz=UTC).isoformat(),
         "total_jobs": len(sorted_jobs),
         "jobs": [job_to_dict(job) for job in sorted_jobs],
     }
@@ -935,7 +939,7 @@ def find_new_jobs(
     For sources with dates (YC): job is new if posted after last scrape
     For sources without dates: job is new if URL wasn't seen before
     """
-    new_jobs = []
+    new_jobs: list[Job] = []
 
     for job in jobs:
         source_id = job.source_id
@@ -998,7 +1002,7 @@ def update_state(
     return state
 
 
-async def login_yc():
+async def login_yc() -> bool:
     """
     Interactive login to YC Work at a Startup.
 
@@ -1069,11 +1073,11 @@ Examples:
     return parser.parse_args()
 
 
-async def main():
+async def main() -> None:
     """Main entry point."""
     args = parse_args()
 
-    scrape_time = datetime.now()
+    scrape_time = datetime.now(tz=UTC)
     timestamp = scrape_time.strftime("%Y-%m-%d_%H-%M-%S")
 
     output_dir = Path(__file__).parent
@@ -1186,14 +1190,14 @@ async def main():
         await browser.close()
 
     # Remove duplicates based on URL
-    unique_jobs = {}
+    unique_jobs: dict[str, Job] = {}
     for job in all_jobs:
         if job.url not in unique_jobs:
             unique_jobs[job.url] = job
     all_jobs = list(unique_jobs.values())
 
     # Filter jobs within date threshold (for those with dates)
-    filtered_jobs = []
+    filtered_jobs: list[Job] = []
     for job in all_jobs:
         if job.days_ago is not None:
             if job.days_ago <= args.days:
@@ -1225,7 +1229,7 @@ async def main():
     # Save new jobs with timestamp
     if new_jobs:
         # Group new jobs by source for metadata
-        sources_with_new = list(set(job.source_id for job in new_jobs))
+        sources_with_new = list({job.source_id for job in new_jobs})
         save_jobs(
             new_jobs,
             new_jobs_file,

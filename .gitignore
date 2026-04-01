@@ -17,3 +17,9 @@ env/
 state.json
 new_jobs/
 yc_auth_state.json
+
+# Claude Code
+.claude/settings.local.json
+
+# Project references
+_refs/

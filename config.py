@@ -1,11 +1,4 @@
-"""
-Configuration settings for the job checker.
-
-This module contains all configurable settings including:
-- Keywords for filtering job titles
-- Default days threshold for job freshness
-- URL filter parameters for different platforms
-"""
+"""Configuration settings for the job checker."""
 
 # Default number of days to look back for fresh jobs
 DEFAULT_DAYS_THRESHOLD = 7

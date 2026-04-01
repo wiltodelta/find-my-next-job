@@ -16,14 +16,32 @@ dev = [
 ]
 
 [tool.ruff]
-line-length = 120
 target-version = "py313"
+line-length = 120
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "W", "UP"]
-ignore = []
+# E = pycodestyle, F = pyflakes, B = bugbear, I = isort
+# S = security (bandit), UP = pyupgrade, SIM = simplification
+# RET = return statements, COM = trailing commas, C4 = comprehensions
+# G = logging format, PT = pytest style, PIE = misc lints
+# T20 = print statements, DTZ = datetime timezone, ICN = import conventions
+# TCH = type-checking imports, RUF = ruff-specific rules
+# ANN = flake8-annotations (require type annotations)
+select = ["E", "F", "B", "I", "S", "UP", "SIM", "RET", "COM", "C4", "G", "PT", "PIE", "T20", "DTZ", "ICN", "TCH", "RUF", "ANN"]
+ignore = [
+    "COM812",  # missing trailing comma (conflicts with ruff formatter)
+    "ANN401",  # Dynamically typed expressions (typing.Any) — sometimes unavoidable with third-party libs
+]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/*.py" = ["G004", "S108", "S310", "T20"]  # scripts: allow f-string logging, /tmp, URL open, print
+"job_checker.py" = ["T20"]  # CLI script: uses print for user output
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
 
 [tool.pyright]
 pythonVersion = "3.13"
-typeCheckingMode = "basic"
+typeCheckingMode = "strict"
 
