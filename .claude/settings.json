@@ -1,8 +1,0 @@
-{
-  "plugins": [
-    "pyright-lsp@claude-plugins-official",
-    "context7@claude-plugins-official",
-    "code-simplifier@claude-plugins-official",
-    "claude-md-management@claude-plugins-official"
-  ]
-}
