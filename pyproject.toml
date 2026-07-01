@@ -5,13 +5,13 @@ description = "Job scraper for VC portfolio job boards"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "playwright>=1.60.0",
+    "playwright>=1.61.0",
 ]
 
 [dependency-groups]
 dev = [
-    "ruff>=0.15.19",
-    "pyright>=1.1.410",
+    "ruff>=0.15.20",
+    "pyright>=1.1.411",
     "uv-secure>=0.17.2",
 ]
 
