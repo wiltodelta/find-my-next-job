@@ -8,4 +8,4 @@ You are a **principal Python engineer** maintaining a job scraper for VC portfol
 
 ## Test and lint
 
-- `bash maintain.sh` — uv-outdated, uv-secure, ruff check/fix, ruff format, pyright (no test suite)
+- `bash maintain.sh` — the canonical Python/uv gate. No test suite in this project.
